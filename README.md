@@ -1,206 +1,117 @@
 # Lexecon Core
 
-Runtime enforcement layer for AI agent tool calls. Lexecon intercepts proposed tool calls before execution, evaluates them against deterministic policy, returns `ALLOW` / `BLOCK` / `ESCALATE`, writes a cryptographically verifiable audit record, and prevents unsafe actions from executing.
+Lexecon is **execution control for AI agents**.
 
-## What It Does
+It intercepts agent tool calls before execution, enforces deterministic policy, and writes a cryptographically verifiable decision trail.
 
-Lexecon sits between an AI agent and the tools it wants to use. Before any tool executes:
+## What This Demo Proves
 
-1. The proposed tool call is submitted to Lexecon
-2. A deterministic policy engine evaluates the call (no LLM involved)
-3. Dangerous patterns are blocked
-4. Every decision is written to a signed, hash-chained audit ledger
-5. Blocked commands **never execute**
+This repository proves one narrow workflow end to end:
 
-## Architecture
+1. An agent attempts a tool call (`shell.run`).
+2. Lexecon intercepts it before execution.
+3. Policy returns `ALLOW`, `BLOCK`, or `ESCALATE`.
+4. Lexecon writes a signed, hash-chained audit record.
+5. Blocked calls do not execute.
+6. An offline verifier can detect audit tampering.
 
-```
-lexecon/
-  enforcement/          # Policy evaluation and interception
-    decision.py         # DecisionType enum, Decision dataclass
-    policy_engine.py    # YAML policy loading, deterministic evaluation
-    interceptor.py      # Tool call interception, execution gate
-  tools/                # Executable tool wrappers
-    shell.py            # subprocess.run wrapper (shell commands)
-  audit/                # Audit records, ledger, signing, verification
-    record.py           # AuditRecord dataclass, SHA-256 hashing
-    ledger.py           # Append-only JSONL ledger with hash chaining
-    signer.py           # Ed25519 key generation and signing
-    verifier.py         # Ledger verification (hash chain + signatures)
-  policies/
-    default_policy.yaml # Blocking rules for dangerous shell commands
-  cli.py                # Typer CLI (init-keys, demo, verify)
-```
+## What This Demo Does **Not** Prove Yet
 
-## Security Model
-
-Lexecon enforces a **fail-closed** model:
-
-- Any failure in policy evaluation → `BLOCK`
-- Any failure in audit writing → `BLOCK`
-- Any failure in signing → `BLOCK`
-- Blocked commands **never execute**
-- Raw tool arguments are **never stored** in audit records (only SHA-256 hashes)
-- Audit records are **hash-chained** and **signed with Ed25519**
-- Ledger tampering is **detected** by independent verification
-
-## Installation
-
-```bash
-pip install -e ".[dev]"
-```
+- Sandboxed operating-system isolation.
+- Enterprise key management (HSM/KMS).
+- Distributed transparency logs or remote attestation.
+- Complete command parsing resistant to advanced obfuscation.
 
 ## Quick Start
 
 ```bash
-# Initialize Ed25519 signing keys
+pip install -e ".[dev]"
 lexecon init-keys
-
-# Run the demo (attempts a destructive command, shows it being blocked)
 lexecon demo
-
-# Verify the audit ledger
 lexecon verify .audit/ledger.jsonl
 ```
 
-### Demo Output
-
-```
-Attempted tool call: shell.run
-Decision: BLOCK
-Reason: Destructive shell command detected.
-Executed: false
-Audit record written: true
-Ledger verification: valid
-```
-
-## Running Tests
+The `demo` command attempts:
 
 ```bash
-pytest
+rm -rf ./important_data
 ```
 
-46 tests covering policy evaluation, interception, audit ledger, signing, verification, and end-to-end demo flow.
+Expected result: `Decision: BLOCK`, `Executed: false`, and `Ledger verification: valid`.
 
-## CLI Commands
+## CLI
 
 ### `lexecon init-keys`
 
-Generate an Ed25519 keypair for signing audit records. Keys are stored in `.lexecon/` (automatically gitignored).
+Creates local Ed25519 keys in `.lexecon/`:
+
+- `private_key.pem`
+- `public_key.pem`
 
 ### `lexecon demo`
 
-Run the blocking demo:
-1. Initialize keys if missing
-2. Attempt `rm -rf ./important_data` through the interceptor
-3. Show decision, reason, execution status, and ledger verification
+Runs the narrow destructive-command demo through the full interceptor path.
 
-### `lexecon verify <path>`
+### `lexecon verify <ledger-path>`
 
-Verify an audit ledger file:
-- Independently recalculates every record's hash
-- Confirms the `previous_hash` chain
-- Verifies Ed25519 signatures
-- Reports `VALID` or `INVALID` with specific errors
+Verifies the ledger by checking:
 
-## Default Policy
+1. Record hash recomputation.
+2. `previous_hash` chain continuity.
+3. Ed25519 signatures.
 
-The default policy blocks these dangerous shell command patterns:
+Outputs `Status: VALID` or `Status: INVALID` with per-record errors.
 
-| Pattern | Example Match |
-|---------|--------------|
-| `rm -rf` | `rm -rf /important_data` |
-| `sudo rm` | `sudo rm -rf /etc` |
-| `mkfs` | `mkfs.ext4 /dev/sda1` |
-| `diskutil erase` | `diskutil eraseDisk JHFS+ NewDisk /dev/disk1` |
+## Install and Test
 
-Policy is deterministic YAML — no LLM is used for evaluation.
-
-## How It Works
-
-### Interception Flow
-
-```
-Proposed tool call
-  → Interceptor.intercept()
-    → PolicyEngine.evaluate()     # Deterministic pattern matching
-      → Decision: BLOCK / ALLOW / ESCALATE
-    → Ledger.write_record()       # Hash, sign, append to JSONL
-    → if ALLOW: execute tool
-    → if BLOCK: return without executing
+```bash
+pip install -e ".[dev]"
+pytest
 ```
 
-### Audit Ledger Format
+Current suite: **44 tests**.
 
-Each line in `.audit/ledger.jsonl` is a JSON record:
+## Repository Map
 
-```json
-{
-  "record_id": "<uuid>",
-  "timestamp": "2026-01-01T00:00:00+00:00",
-  "tool_name": "shell.run",
-  "tool_args_hash": "<sha-256-of-canonical-json>",
-  "decision": "BLOCK",
-  "reason": "Destructive shell command detected.",
-  "policy_id": "block_destructive_shell",
-  "previous_hash": "GENESIS",
-  "record_hash": "<sha-256-of-record-data>",
-  "signature": "<ed25519-signature-base64>"
-}
+```text
+lexecon/
+  cli.py                     # CLI entrypoints: init-keys, demo, verify
+  enforcement/
+    policy_engine.py         # Deterministic YAML policy evaluation
+    interceptor.py           # Enforcement boundary: decision -> audit -> optional execution
+    decision.py              # Decision model (ALLOW/BLOCK/ESCALATE)
+  tools/
+    shell.py                 # shell.run wrapper used only after ALLOW
+  audit/
+    record.py                # Canonical record schema + hashing helpers
+    ledger.py                # Append-only JSONL writing + hash chain linkage
+    signer.py                # Ed25519 key generation/sign/verify
+    verifier.py              # Offline ledger integrity verification
+  policies/
+    default_policy.yaml      # Dangerous command blocking patterns
+examples/
+  block_destructive_shell.py # Scripted demo path
+tests/                       # Unit and end-to-end coverage
 ```
 
-- First record has `previous_hash: "GENESIS"`
-- Each subsequent record links to the previous record's `record_hash`
-- Every record is signed with Ed25519
+## Threat Model (Demo Scope)
 
-### Verification
+- **Protected asset:** real-world tool execution.
+- **Trust boundary:** agent output crossing into tool execution.
+- **Control point:** `Interceptor.intercept()`.
+- **Audit goal:** prove what was decided and whether the record was modified later.
+- **Fail-closed behavior:** interceptor errors return `BLOCK` and prevent execution.
 
-The verifier independently:
-1. Recalculates each record's SHA-256 hash
-2. Confirms the `previous_hash` chain is unbroken
-3. Verifies the Ed25519 signature on each record
-4. Detects edited records, reordered records, and missing records
+See `SECURITY_REVIEW_REPORT.md` for detailed findings and limitations.
 
-## Project Structure
+## Files to Inspect First
 
-```
-lexecon-core/
-  README.md
-  LICENSE
-  pyproject.toml
-  .gitignore
-  .env.example
-  SECURITY_REVIEW_REPORT.md
-  lexecon/
-    __init__.py
-    enforcement/
-      __init__.py
-      decision.py
-      interceptor.py
-      policy_engine.py
-    tools/
-      __init__.py
-      shell.py
-    audit/
-      __init__.py
-      record.py
-      ledger.py
-      signer.py
-      verifier.py
-    policies/
-      __init__.py
-      default_policy.yaml
-    cli.py
-  examples/
-    block_destructive_shell.py
-  tests/
-    test_policy_engine.py
-    test_interceptor.py
-    test_audit_ledger.py
-    test_signer.py
-    test_verifier.py
-    test_demo_flow.py
-```
+- `lexecon/enforcement/interceptor.py`
+- `lexecon/enforcement/policy_engine.py`
+- `lexecon/audit/ledger.py`
+- `lexecon/audit/verifier.py`
+- `tests/test_demo_flow.py`
+- `tests/test_verifier.py`
 
 ## License
 
