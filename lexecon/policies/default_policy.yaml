@@ -1,0 +1,10 @@
+rules:
+  - id: block_destructive_shell
+    tool: shell.run
+    action: BLOCK
+    patterns:
+      - "rm -rf"
+      - "sudo rm"
+      - "mkfs"
+      - "diskutil erase"
+    reason: "Destructive shell command detected."
