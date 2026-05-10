@@ -17,7 +17,7 @@ The current Lexecon Core MVP satisfies the core enforcement proof:
 6. Audit records are signed with Ed25519.
 7. Ledger verification detects tampering.
 
-Test status: `46 passed`.
+Test status: `44 passed`.
 
 CLI status:
 
