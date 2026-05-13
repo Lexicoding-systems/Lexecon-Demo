@@ -73,6 +73,12 @@ class PolicyEngine:
                     "Malformed shell.run args: args must be a list.",
                     "error",
                 )
+            if not all(isinstance(a, str) for a in cmd_args):
+                return Decision(
+                    DecisionType.BLOCK,
+                    "Malformed shell.run args: every element of args must be a string.",
+                    "error",
+                )
 
             # Allowlist check: only explicitly permitted executables may run.
             if executable not in self.allowed_executables:
@@ -83,7 +89,7 @@ class PolicyEngine:
                 )
 
             # Pattern-based block rules (checked against full arg string for compatibility).
-            arg_string = " ".join([executable] + [str(a) for a in cmd_args])
+            arg_string = " ".join([executable] + cmd_args)
             for rule in self.rules:
                 if tool_name != rule.get("tool"):
                     continue

@@ -184,3 +184,26 @@ def test_interceptor_defense_in_depth_blocks_allowed_unsupported_tool(temp_ledge
     assert result["decision"] == "BLOCK"
     assert result["executed"] is False
     assert shell_run_called is False
+
+
+def test_audit_record_id_preserved_when_execution_raises(temp_ledger, monkeypatch):
+    """audit_record_id must be non-empty even when shell_run raises after ALLOW."""
+    def exploding_shell_run(executable, args, timeout=10):
+        raise RuntimeError("subprocess failed unexpectedly")
+
+    monkeypatch.setattr("lexecon.tools.shell.shell_run", exploding_shell_run)
+
+    policy_engine = PolicyEngine()
+    interceptor = Interceptor(policy_engine, temp_ledger)
+
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["hello"]}}
+    result = interceptor.intercept(tool_call)
+
+    assert result["decision"] == "BLOCK"
+    assert result["executed"] is False
+    assert result["audit_record_id"] != "", "audit_record_id must be preserved even when execution raises"
+
+    # Confirm the audit record is actually in the ledger
+    records = temp_ledger.read_all_records()
+    assert len(records) == 1
+    assert records[0].record_id == result["audit_record_id"]

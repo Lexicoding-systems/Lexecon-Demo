@@ -22,9 +22,11 @@ class Interceptor:
         Ordering invariant:
         policy decision -> audit write -> optional execution.
         """
+        audit_record_id = ""
         try:
             decision = self.policy_engine.evaluate(tool_call)
             audit_record = self.ledger.write_record(tool_call if isinstance(tool_call, dict) else {}, decision)
+            audit_record_id = audit_record.record_id
 
             executed = False
             tool_result = None
@@ -37,7 +39,7 @@ class Interceptor:
                         "decision": DecisionType.BLOCK.value,
                         "executed": False,
                         "tool_result": None,
-                        "audit_record_id": audit_record.record_id,
+                        "audit_record_id": audit_record_id,
                         "reason": f"Unsupported tool reached execution boundary: {tool_name}",
                     }
 
@@ -53,16 +55,17 @@ class Interceptor:
                 "decision": decision.decision.value,
                 "executed": executed,
                 "tool_result": tool_result,
-                "audit_record_id": audit_record.record_id,
+                "audit_record_id": audit_record_id,
                 "reason": decision.reason,
             }
 
         except Exception as exc:
             # Fail-closed: any error in interception prevents execution.
+            # audit_record_id is preserved here if the audit write succeeded before the error.
             return {
                 "decision": DecisionType.BLOCK.value,
                 "executed": False,
                 "tool_result": None,
-                "audit_record_id": "",
+                "audit_record_id": audit_record_id,
                 "reason": f"Interceptor error: {exc}",
             }

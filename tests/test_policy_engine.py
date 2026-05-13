@@ -102,3 +102,11 @@ def test_policy_non_list_args():
     result = engine.evaluate({"tool": "shell.run", "args": {"executable": "ls", "args": "-la"}})
     assert result.decision == DecisionType.BLOCK
     assert result.policy_id == "error"
+
+
+def test_policy_non_string_arg_elements():
+    """Args list containing non-string elements must BLOCK before ALLOW or dispatch."""
+    engine = PolicyEngine()
+    result = engine.evaluate({"tool": "shell.run", "args": {"executable": "ls", "args": [1]}})
+    assert result.decision == DecisionType.BLOCK
+    assert result.policy_id == "error"
