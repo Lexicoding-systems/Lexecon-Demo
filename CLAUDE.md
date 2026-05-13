@@ -67,25 +67,44 @@ The three layers are strictly ordered: **policy → audit → execution**. No to
 3. **Hash chain**: first record has `previous_hash == "GENESIS"`; each subsequent record's `previous_hash` must equal the previous record's `record_hash`. The verifier independently recomputes hashes to detect tampering.
 4. **Defense-in-depth in interceptor**: even if policy returns `ALLOW` for an unknown tool name, the interceptor explicitly blocks any tool that is not `shell.run`.
 5. **Only one supported tool**: `PolicyEngine.SUPPORTED_TOOLS = {"shell.run"}`. Adding a new tool requires updating this set and adding interceptor dispatch.
+6. **Structured args, no shell injection**: `shell.run` tool calls use `{"executable": str, "args": list[str]}` — never a raw command string. `shell_run()` uses `subprocess.run([executable] + args, shell=False)`. The policy engine rejects any executable not listed in `allowed_executables` (policy YAML) before reaching pattern checks.
+7. **No bypass enforcement at the tools layer**: `lexecon/tools/shell.py` has no policy or audit logic. Any code that imports and calls `shell_run()` directly — or spawns a subprocess by any other means — silently bypasses all Lexecon guarantees. The integrator is responsible for routing every tool call through `Interceptor.intercept()`.
 
 ## Policy YAML Format
 
 ```yaml
+allowed_executables:        # positive allowlist — unlisted executables are BLOCKed
+  - ls
+  - echo
+
 rules:
   - id: block_destructive_shell   # unique rule ID surfaced in audit records
     tool: shell.run               # exact match against tool_call["tool"]
     action: BLOCK                 # BLOCK or ESCALATE
-    patterns:                     # substring match against the command string
+    patterns:                     # substring match against "<executable> <args...>"
       - "rm -rf"
     reason: "Destructive shell command detected."
 ```
 
 Custom policies can be passed via `PolicyEngine(policy_path=Path("custom.yaml"))`.
 
+## Tool Call Schema
+
+```python
+# shell.run tool call — structured args, no shell string
+tool_call = {
+    "tool": "shell.run",
+    "args": {
+        "executable": "echo",     # must be in policy allowed_executables
+        "args": ["hello", "world"],  # list of string arguments
+    },
+}
+```
+
 ## Test Conventions
 
 - All tests use `tmp_path` for file isolation — never write to `.audit/` or `.lexecon/` from tests.
-- Stub actual shell execution with `monkeypatch.setattr("lexecon.tools.shell.shell_run", ...)` — the interceptor imports `shell_run` lazily inside the `if decision.allowed` branch, so patching the module-level name works.
+- Stub actual shell execution with `monkeypatch.setattr("lexecon.tools.shell.shell_run", ...)` — the interceptor imports `shell_run` lazily inside the `if decision.allowed` branch, so patching the module-level name works. Stub signature: `def fake(executable, args, timeout=10)`.
 - The most critical test is `test_interceptor_never_executes_blocked_tool` in `tests/test_interceptor.py` — it asserts the stub was never called when policy returns BLOCK.
 - `tests/test_demo_flow.py` contains the end-to-end integration tests including multi-record chain verification.
 

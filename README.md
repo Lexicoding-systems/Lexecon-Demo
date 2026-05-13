@@ -104,6 +104,26 @@ tests/                       # Unit and end-to-end coverage
 
 See `SECURITY_REVIEW_REPORT.md` for detailed findings and limitations.
 
+## Integration Warning
+
+**All tool calls must be routed through `Interceptor.intercept()`.**
+
+Calling `lexecon.tools.shell.shell_run()` directly, or invoking any subprocess outside the interceptor, bypasses policy evaluation and audit logging entirely. The security and audit guarantees only apply when execution flows through the interceptor:
+
+```python
+# CORRECT — policy is checked, audit record is written
+result = interceptor.intercept({
+    "tool": "shell.run",
+    "args": {"executable": "ls", "args": ["-la"]},
+})
+
+# WRONG — bypasses all policy and audit
+from lexecon.tools.shell import shell_run
+shell_run("ls", ["-la"])  # no policy check, no audit record
+```
+
+There is no runtime enforcement preventing direct calls to the tools layer. It is the integrator's responsibility to ensure every agent tool call enters through `Interceptor.intercept()`.
+
 ## Files to Inspect First
 
 - `lexecon/enforcement/interceptor.py`

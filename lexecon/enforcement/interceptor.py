@@ -43,8 +43,10 @@ class Interceptor:
 
                 from ..tools.shell import shell_run
 
-                command = tool_call.get("args", {}).get("command", "")
-                tool_result = shell_run(command)
+                tool_args = tool_call.get("args", {})
+                executable = tool_args.get("executable", "")
+                cmd_args = tool_args.get("args", [])
+                tool_result = shell_run(executable, cmd_args)
                 executed = True
 
             return {

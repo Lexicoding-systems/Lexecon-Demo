@@ -1,5 +1,6 @@
 """CLI for Lexecon Core."""
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -42,10 +43,10 @@ def demo():
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, ledger)
 
-    # Attempt destructive command
+    # Attempt destructive command (structured args — no shell=True)
     tool_call = {
         "tool": "shell.run",
-        "args": {"command": "rm -rf ./important_data"},
+        "args": {"executable": "rm", "args": ["-rf", "./important_data"]},
     }
 
     result = interceptor.intercept(tool_call)
@@ -64,10 +65,17 @@ def demo():
 
 
 @app.command()
-def verify(path: str):
+def verify(
+    path: str,
+    public_key: Optional[Path] = typer.Option(
+        None,
+        "--public-key",
+        help="Path to Ed25519 public key PEM for third-party verification. Defaults to .lexecon/public_key.pem.",
+    ),
+):
     """Verify an audit ledger at the given path."""
     ledger_path = Path(path)
-    signer = Signer()
+    signer = Signer(public_key_path=public_key)
     verifier = Verifier(signer=signer)
     result = verifier.verify_ledger(ledger_path)
 

@@ -21,10 +21,10 @@ def main():
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, ledger)
 
-    # Attempt a destructive command
+    # Attempt a destructive command (structured args — no shell=True)
     tool_call = {
         "tool": "shell.run",
-        "args": {"command": "rm -rf ./important_data"},
+        "args": {"executable": "rm", "args": ["-rf", "./important_data"]},
     }
 
     result = interceptor.intercept(tool_call)
