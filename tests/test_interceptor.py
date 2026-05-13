@@ -24,7 +24,7 @@ def test_interceptor_never_executes_blocked_tool(temp_ledger, monkeypatch):
     """
     shell_run_called = False
 
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         nonlocal shell_run_called
         shell_run_called = True
         return {"stdout": "", "stderr": "", "returncode": 0}
@@ -34,7 +34,7 @@ def test_interceptor_never_executes_blocked_tool(temp_ledger, monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "rm -rf ./important_data"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "rm", "args": ["-rf", "./important_data"]}}
     result = interceptor.intercept(tool_call)
 
     assert result["decision"] == "BLOCK"
@@ -45,7 +45,7 @@ def test_interceptor_never_executes_blocked_tool(temp_ledger, monkeypatch):
 
 def test_interceptor_executes_allowed_tool(temp_ledger, monkeypatch):
     """When policy returns ALLOW, the tool must execute and return result."""
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         return {"stdout": "hello", "stderr": "", "returncode": 0}
 
     monkeypatch.setattr("lexecon.tools.shell.shell_run", fake_shell_run)
@@ -53,7 +53,7 @@ def test_interceptor_executes_allowed_tool(temp_ledger, monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "echo hello"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["hello"]}}
     result = interceptor.intercept(tool_call)
 
     assert result["decision"] == "ALLOW"
@@ -64,12 +64,15 @@ def test_interceptor_executes_allowed_tool(temp_ledger, monkeypatch):
 
 def test_blocked_call_returns_correct_structure(temp_ledger, monkeypatch):
     """Blocked call must return structured output with all fields."""
-    monkeypatch.setattr("lexecon.tools.shell.shell_run", lambda c, t=10: {"stdout": "", "stderr": "", "returncode": 0})
+    monkeypatch.setattr(
+        "lexecon.tools.shell.shell_run",
+        lambda exe, args, timeout=10: {"stdout": "", "stderr": "", "returncode": 0},
+    )
 
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "rm -rf /"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "rm", "args": ["-rf", "/"]}}
     result = interceptor.intercept(tool_call)
 
     assert "decision" in result
@@ -85,12 +88,15 @@ def test_blocked_call_returns_correct_structure(temp_ledger, monkeypatch):
 
 def test_audit_record_written_for_blocked_call(temp_ledger, monkeypatch):
     """Every blocked call must produce an audit record."""
-    monkeypatch.setattr("lexecon.tools.shell.shell_run", lambda c, t=10: {"stdout": "", "stderr": "", "returncode": 0})
+    monkeypatch.setattr(
+        "lexecon.tools.shell.shell_run",
+        lambda exe, args, timeout=10: {"stdout": "", "stderr": "", "returncode": 0},
+    )
 
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "sudo rm -rf /data"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "rm", "args": ["-rf", "/data"]}}
     result = interceptor.intercept(tool_call)
 
     records = temp_ledger.read_all_records()
@@ -101,12 +107,15 @@ def test_audit_record_written_for_blocked_call(temp_ledger, monkeypatch):
 
 def test_audit_record_written_for_allowed_call(temp_ledger, monkeypatch):
     """Every allowed call must produce an audit record."""
-    monkeypatch.setattr("lexecon.tools.shell.shell_run", lambda c, t=10: {"stdout": "out", "stderr": "", "returncode": 0})
+    monkeypatch.setattr(
+        "lexecon.tools.shell.shell_run",
+        lambda exe, args, timeout=10: {"stdout": "out", "stderr": "", "returncode": 0},
+    )
 
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "echo test"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["test"]}}
     result = interceptor.intercept(tool_call)
 
     records = temp_ledger.read_all_records()
@@ -122,7 +131,7 @@ def test_interceptor_fail_closed_on_ledger_error(monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, bad_ledger)
 
-    tool_call = {"tool": "shell.run", "args": {"command": "echo hello"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["hello"]}}
     result = interceptor.intercept(tool_call)
 
     assert result["decision"] == "BLOCK"
@@ -133,7 +142,7 @@ def test_interceptor_never_executes_wrong_tool_name(temp_ledger, monkeypatch):
     """SECURITY: unsupported tool names must BLOCK and never execute."""
     shell_run_called = False
 
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         nonlocal shell_run_called
         shell_run_called = True
         return {"stdout": "", "stderr": "", "returncode": 0}
@@ -143,7 +152,7 @@ def test_interceptor_never_executes_wrong_tool_name(temp_ledger, monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, temp_ledger)
 
-    tool_call = {"tool": "file.read", "args": {"command": "rm -rf /"}}
+    tool_call = {"tool": "file.read", "args": {"executable": "rm", "args": ["-rf", "/"]}}
     result = interceptor.intercept(tool_call)
 
     assert result["decision"] == "BLOCK"
@@ -162,7 +171,7 @@ def test_interceptor_defense_in_depth_blocks_allowed_unsupported_tool(temp_ledge
 
     shell_run_called = False
 
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         nonlocal shell_run_called
         shell_run_called = True
         return {"stdout": "", "stderr": "", "returncode": 0}
@@ -170,8 +179,31 @@ def test_interceptor_defense_in_depth_blocks_allowed_unsupported_tool(temp_ledge
     monkeypatch.setattr("lexecon.tools.shell.shell_run", fake_shell_run)
     interceptor = Interceptor(BadPolicyEngine(), temp_ledger)
 
-    result = interceptor.intercept({"tool": "file.read", "args": {"command": "rm -rf /"}})
+    result = interceptor.intercept({"tool": "file.read", "args": {"executable": "rm", "args": ["-rf", "/"]}})
 
     assert result["decision"] == "BLOCK"
     assert result["executed"] is False
     assert shell_run_called is False
+
+
+def test_audit_record_id_preserved_when_execution_raises(temp_ledger, monkeypatch):
+    """audit_record_id must be non-empty even when shell_run raises after ALLOW."""
+    def exploding_shell_run(executable, args, timeout=10):
+        raise RuntimeError("subprocess failed unexpectedly")
+
+    monkeypatch.setattr("lexecon.tools.shell.shell_run", exploding_shell_run)
+
+    policy_engine = PolicyEngine()
+    interceptor = Interceptor(policy_engine, temp_ledger)
+
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["hello"]}}
+    result = interceptor.intercept(tool_call)
+
+    assert result["decision"] == "BLOCK"
+    assert result["executed"] is False
+    assert result["audit_record_id"] != "", "audit_record_id must be preserved even when execution raises"
+
+    # Confirm the audit record is actually in the ledger
+    records = temp_ledger.read_all_records()
+    assert len(records) == 1
+    assert records[0].record_id == result["audit_record_id"]

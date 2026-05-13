@@ -1,3 +1,12 @@
+allowed_executables:
+  - ls
+  - echo
+  - cat
+  - grep
+  - pwd
+  - date
+  - whoami
+
 rules:
   - id: block_destructive_shell
     tool: shell.run

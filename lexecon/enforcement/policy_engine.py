@@ -16,25 +16,31 @@ class PolicyEngine:
 
     def __init__(self, policy_path: Path | None = None):
         self.policy_path = policy_path or DEFAULT_POLICY_PATH
-        self.rules = self._load_policy()
+        policy_data = self._load_policy()
+        self.rules: list[dict[str, Any]] = policy_data["rules"]
+        self.allowed_executables: set[str] = set(policy_data["allowed_executables"])
 
-    def _load_policy(self) -> list[dict[str, Any]]:
+    def _load_policy(self) -> dict[str, Any]:
         with open(self.policy_path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         rules = data.get("rules", [])
         if not isinstance(rules, list):
             raise ValueError("Policy file must contain a list under 'rules'.")
-        return rules
+        allowed_executables = data.get("allowed_executables", [])
+        if not isinstance(allowed_executables, list):
+            raise ValueError("Policy file must contain a list under 'allowed_executables'.")
+        return {"rules": rules, "allowed_executables": allowed_executables}
 
     def evaluate(self, tool_call: dict[str, Any]) -> Decision:
         """
         Evaluate a tool call against loaded policy rules.
 
         Security posture:
-        - Unknown tools are blocked in the MVP.
+        - Unknown tools are blocked.
         - Malformed input is blocked.
+        - Executables not on the allowlist are blocked.
         - Matching BLOCK rules block execution.
-        - No blocking match for a supported well-formed tool returns ALLOW.
+        - No blocking match for a supported, allowlisted tool returns ALLOW.
         - Any exception returns BLOCK.
         """
         try:
@@ -52,10 +58,38 @@ class PolicyEngine:
             if not isinstance(args, dict):
                 return Decision(DecisionType.BLOCK, "Malformed tool args: args must be a dict.", "error")
 
-            command = args.get("command")
-            if not isinstance(command, str) or not command.strip():
-                return Decision(DecisionType.BLOCK, "Malformed shell.run args: command must be a non-empty string.", "error")
+            executable = args.get("executable")
+            if not isinstance(executable, str) or not executable.strip():
+                return Decision(
+                    DecisionType.BLOCK,
+                    "Malformed shell.run args: executable must be a non-empty string.",
+                    "error",
+                )
 
+            cmd_args = args.get("args", [])
+            if not isinstance(cmd_args, list):
+                return Decision(
+                    DecisionType.BLOCK,
+                    "Malformed shell.run args: args must be a list.",
+                    "error",
+                )
+            if not all(isinstance(a, str) for a in cmd_args):
+                return Decision(
+                    DecisionType.BLOCK,
+                    "Malformed shell.run args: every element of args must be a string.",
+                    "error",
+                )
+
+            # Allowlist check: only explicitly permitted executables may run.
+            if executable not in self.allowed_executables:
+                return Decision(
+                    DecisionType.BLOCK,
+                    f"Executable not in allowlist: {executable}",
+                    "not_allowlisted",
+                )
+
+            # Pattern-based block rules (checked against full arg string for compatibility).
+            arg_string = " ".join([executable] + cmd_args)
             for rule in self.rules:
                 if tool_name != rule.get("tool"):
                     continue
@@ -66,7 +100,7 @@ class PolicyEngine:
                     return Decision(DecisionType.BLOCK, "Malformed policy rule: patterns must be a list.", "error")
 
                 for pattern in patterns:
-                    if isinstance(pattern, str) and pattern in command:
+                    if isinstance(pattern, str) and pattern in arg_string:
                         decision_type = DecisionType.BLOCK if action == "BLOCK" else DecisionType.ESCALATE
                         return Decision(
                             decision_type,

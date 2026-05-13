@@ -24,7 +24,7 @@ def test_demo_flow_blocks_destructive_command(tmp_path, monkeypatch):
 
     # Prevent actual shell execution
     shell_executed = False
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         nonlocal shell_executed
         shell_executed = True
         return {"stdout": "", "stderr": "", "returncode": 0}
@@ -34,13 +34,12 @@ def test_demo_flow_blocks_destructive_command(tmp_path, monkeypatch):
     # Attempt destructive command (same as demo)
     tool_call = {
         "tool": "shell.run",
-        "args": {"command": "rm -rf ./important_data"},
+        "args": {"executable": "rm", "args": ["-rf", "./important_data"]},
     }
     result = interceptor.intercept(tool_call)
 
     # Assertions
     assert result["decision"] == "BLOCK", f"Expected BLOCK, got {result['decision']}"
-    assert result["reason"] == "Destructive shell command detected."
     assert result["executed"] is False
     assert shell_executed is False, "Destructive command must NOT execute"
     assert result["audit_record_id"] != ""
@@ -70,14 +69,14 @@ def test_demo_flow_allows_safe_command(tmp_path, monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, ledger)
 
-    def fake_shell_run(command, timeout=10):
+    def fake_shell_run(executable, args, timeout=10):
         return {"stdout": "hello world", "stderr": "", "returncode": 0}
 
     monkeypatch.setattr("lexecon.tools.shell.shell_run", fake_shell_run)
 
     tool_call = {
         "tool": "shell.run",
-        "args": {"command": "echo hello world"},
+        "args": {"executable": "echo", "args": ["hello", "world"]},
     }
     result = interceptor.intercept(tool_call)
 
@@ -104,12 +103,15 @@ def test_demo_flow_multiple_commands(tmp_path, monkeypatch):
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, ledger)
 
-    monkeypatch.setattr("lexecon.tools.shell.shell_run", lambda c, t=10: {"stdout": "", "stderr": "", "returncode": 0})
+    monkeypatch.setattr(
+        "lexecon.tools.shell.shell_run",
+        lambda exe, args, timeout=10: {"stdout": "", "stderr": "", "returncode": 0},
+    )
 
-    # Mix of blocked and allowed
-    interceptor.intercept({"tool": "shell.run", "args": {"command": "rm -rf /data"}})
-    interceptor.intercept({"tool": "shell.run", "args": {"command": "ls -la"}})
-    interceptor.intercept({"tool": "shell.run", "args": {"command": "echo test"}})
+    # Mix of blocked (rm not allowlisted) and allowed
+    interceptor.intercept({"tool": "shell.run", "args": {"executable": "rm", "args": ["-rf", "/data"]}})
+    interceptor.intercept({"tool": "shell.run", "args": {"executable": "ls", "args": ["-la"]}})
+    interceptor.intercept({"tool": "shell.run", "args": {"executable": "echo", "args": ["test"]}})
 
     verifier = Verifier(signer=signer)
     verification = verifier.verify_ledger(ledger_path)

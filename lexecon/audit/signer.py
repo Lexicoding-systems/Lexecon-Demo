@@ -15,8 +15,9 @@ DEFAULT_KEY_DIR = Path(".lexecon")
 class Signer:
     """Ed25519 key management and signing for local MVP use."""
 
-    def __init__(self, key_dir: Path | None = None):
+    def __init__(self, key_dir: Path | None = None, public_key_path: Path | None = None):
         self.key_dir = Path(key_dir) if key_dir else DEFAULT_KEY_DIR
+        self._explicit_public_key_path: Path | None = Path(public_key_path) if public_key_path else None
         self._private_key: Ed25519PrivateKey | None = None
         self._public_key: Ed25519PublicKey | None = None
 
@@ -44,6 +45,12 @@ class Signer:
     @property
     def public_key(self) -> Ed25519PublicKey:
         if self._public_key is not None:
+            return self._public_key
+
+        # Explicit path takes precedence — supports third-party verification without private key.
+        if self._explicit_public_key_path is not None:
+            with open(self._explicit_public_key_path, "rb") as f:
+                self._public_key = serialization.load_pem_public_key(f.read())
             return self._public_key
 
         public_path = self.key_dir / "public_key.pem"

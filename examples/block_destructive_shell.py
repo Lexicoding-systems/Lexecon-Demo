@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
-Demo: Block a destructive shell command through Lexecon.
+Demo: Block an unlisted executable through Lexecon.
+
+'rm' is not in the default allowed_executables allowlist, so the policy
+engine blocks it at the allowlist check before any pattern rules are
+evaluated. To see destructive-pattern enforcement in action, allowlist 'rm'
+in a custom policy and pass {"executable": "rm", "args": ["-rf", "..."]} —
+the block_destructive_shell rule will then fire.
 """
 import sys
 from pathlib import Path
@@ -21,10 +27,10 @@ def main():
     policy_engine = PolicyEngine()
     interceptor = Interceptor(policy_engine, ledger)
 
-    # Attempt a destructive command
+    # Attempt a destructive command (structured args — no shell=True)
     tool_call = {
         "tool": "shell.run",
-        "args": {"command": "rm -rf ./important_data"},
+        "args": {"executable": "rm", "args": ["-rf", "./important_data"]},
     }
 
     result = interceptor.intercept(tool_call)

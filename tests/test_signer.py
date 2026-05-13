@@ -95,3 +95,30 @@ def test_key_directory_permissions_restrictive(tmp_path):
 
     mode = stat.S_IMODE(key_dir.stat().st_mode)
     assert mode == 0o700, f"Key directory mode is {oct(mode)}, expected 0o700"
+
+
+def test_explicit_public_key_path_verifies_signature(tmp_path):
+    """Signer with explicit public_key_path can verify signatures from matching private key."""
+    key_dir = tmp_path / "keys"
+    signer_with_private = Signer(key_dir=key_dir)
+    message = "third-party verification test"
+    signature = signer_with_private.sign(message)
+
+    public_key_file = key_dir / "public_key.pem"
+    third_party_signer = Signer(public_key_path=public_key_file)
+    assert third_party_signer.verify(message, signature) is True
+
+
+def test_explicit_public_key_path_wrong_key_fails(tmp_path):
+    """Signer with explicit public_key_path from a different keypair must fail verification."""
+    signer_a = Signer(key_dir=tmp_path / "keys_a")
+    signer_b = Signer(key_dir=tmp_path / "keys_b")
+
+    message = "test"
+    signature = signer_a.sign(message)
+
+    # Give signer_b's public key to a third-party verifier
+    third_party = Signer(public_key_path=tmp_path / "keys_b" / "public_key.pem")
+    # Trigger key_b generation
+    _ = signer_b.public_key
+    assert third_party.verify(message, signature) is False

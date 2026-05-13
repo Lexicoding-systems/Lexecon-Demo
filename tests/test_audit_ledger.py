@@ -17,15 +17,15 @@ def temp_ledger(tmp_path):
 def test_ledger_first_record_genesis(temp_ledger):
     """First record must have previous_hash == 'GENESIS'."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
-    record = temp_ledger.write_record({"tool": "shell.run", "args": {"command": "ls"}}, decision)
+    record = temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "ls", "args": []}}, decision)
     assert record.previous_hash == "GENESIS"
 
 
 def test_ledger_second_record_links_first(temp_ledger):
     """Second record's previous_hash must equal first record's record_hash."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
-    r1 = temp_ledger.write_record({"tool": "shell.run", "args": {"command": "ls"}}, decision)
-    r2 = temp_ledger.write_record({"tool": "shell.run", "args": {"command": "pwd"}}, decision)
+    r1 = temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "ls", "args": []}}, decision)
+    r2 = temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "pwd", "args": []}}, decision)
     assert r2.previous_hash == r1.record_hash
 
 
@@ -34,7 +34,7 @@ def test_ledger_hash_chain_valid(temp_ledger):
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
     records = []
     for i in range(5):
-        tool_call = {"tool": "shell.run", "args": {"command": f"cmd{i}"}}
+        tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": [f"cmd{i}"]}}
         record = temp_ledger.write_record(tool_call, decision)
         records.append(record)
 
@@ -46,7 +46,7 @@ def test_ledger_hash_chain_valid(temp_ledger):
 def test_ledger_hash_is_deterministic(temp_ledger):
     """Same record data must produce the same hash."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
-    tool_call = {"tool": "shell.run", "args": {"command": "echo test"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["test"]}}
 
     r1 = temp_ledger.write_record(tool_call, decision)
 
@@ -68,7 +68,7 @@ def test_ledger_hash_is_deterministic(temp_ledger):
 def test_ledger_does_not_store_raw_args(temp_ledger):
     """Audit record must not contain raw tool args, only hash."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
-    tool_call = {"tool": "shell.run", "args": {"command": "echo secret_password"}}
+    tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": ["secret_password"]}}
     record = temp_ledger.write_record(tool_call, decision)
 
     assert record.tool_args_hash != ""
@@ -81,7 +81,7 @@ def test_ledger_append_only(temp_ledger):
     """Writing multiple times must append, not overwrite."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
     for i in range(3):
-        tool_call = {"tool": "shell.run", "args": {"command": f"cmd{i}"}}
+        tool_call = {"tool": "shell.run", "args": {"executable": "echo", "args": [f"cmd{i}"]}}
         temp_ledger.write_record(tool_call, decision)
 
     records = temp_ledger.read_all_records()
@@ -91,7 +91,7 @@ def test_ledger_append_only(temp_ledger):
 def test_ledger_file_contains_valid_jsonl(temp_ledger):
     """Each line in ledger file must be valid JSON."""
     decision = Decision(DecisionType.BLOCK, "test", "test-policy")
-    temp_ledger.write_record({"tool": "shell.run", "args": {"command": "rm -rf /"}}, decision)
+    temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "rm", "args": ["-rf", "/"]}}, decision)
 
     with open(temp_ledger.ledger_path, "r") as f:
         lines = f.readlines()
@@ -107,8 +107,8 @@ def test_ledger_file_contains_valid_jsonl(temp_ledger):
 def test_ledger_read_all_records(temp_ledger):
     """read_all_records must return AuditRecord objects."""
     decision = Decision(DecisionType.ALLOW, "test", "test-policy")
-    temp_ledger.write_record({"tool": "shell.run", "args": {"command": "ls"}}, decision)
-    temp_ledger.write_record({"tool": "shell.run", "args": {"command": "pwd"}}, decision)
+    temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "ls", "args": []}}, decision)
+    temp_ledger.write_record({"tool": "shell.run", "args": {"executable": "pwd", "args": []}}, decision)
 
     records = temp_ledger.read_all_records()
     assert len(records) == 2
