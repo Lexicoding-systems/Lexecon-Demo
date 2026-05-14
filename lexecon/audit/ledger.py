@@ -1,5 +1,6 @@
 """Append-only JSONL ledger with hash chaining."""
 import json
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ class Ledger:
     def __init__(self, ledger_path: Path | None = None, signer: Signer | None = None):
         self.ledger_path = Path(ledger_path) if ledger_path else DEFAULT_LEDGER_PATH
         self.signer = signer or Signer()
+        self._lock = threading.Lock()
 
     def get_last_hash(self) -> str:
         """Return the record_hash of the last entry, or 'GENESIS' if empty."""
@@ -31,31 +33,36 @@ class Ledger:
     def write_record(self, tool_call: dict, decision) -> AuditRecord:
         """
         Create, sign, and append an audit record.
+
+        The lock ensures get_last_hash() and the file append are atomic with
+        respect to other threads so the hash chain stays consistent under
+        concurrent interceptor calls.
         """
         from lexecon.enforcement.decision import Decision, DecisionType
 
-        record = AuditRecord(
-            record_id=uuid.uuid4().hex,
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            tool_name=tool_call.get("tool", ""),
-            tool_args_hash=AuditRecord.hash_tool_args(tool_call.get("args", {})),
-            decision=decision.decision.value,
-            reason=decision.reason,
-            policy_id=decision.policy_id,
-            previous_hash=self.get_last_hash(),
-        )
+        with self._lock:
+            record = AuditRecord(
+                record_id=uuid.uuid4().hex,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                tool_name=tool_call.get("tool", ""),
+                tool_args_hash=AuditRecord.hash_tool_args(tool_call.get("args", {})),
+                decision=decision.decision.value,
+                reason=decision.reason,
+                policy_id=decision.policy_id,
+                previous_hash=self.get_last_hash(),
+            )
 
-        # Compute hash
-        record_dict = record.__dict__.copy()
-        record.record_hash = AuditRecord.compute_record_hash(record_dict)
+            # Compute hash
+            record_dict = record.__dict__.copy()
+            record.record_hash = AuditRecord.compute_record_hash(record_dict)
 
-        # Sign
-        record.signature = self.signer.sign(record.record_hash)
+            # Sign
+            record.signature = self.signer.sign(record.record_hash)
 
-        # Append to JSONL
-        self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.ledger_path, "a") as f:
-            f.write(json.dumps(record.__dict__, sort_keys=True, separators=(",", ":")) + "\n")
+            # Append to JSONL
+            self.ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.ledger_path, "a") as f:
+                f.write(json.dumps(record.__dict__, sort_keys=True, separators=(",", ":")) + "\n")
 
         return record
 

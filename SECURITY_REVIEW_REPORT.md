@@ -81,7 +81,7 @@ The key directory is restricted to owner access and private key creation uses re
 
 These are acceptable for the current local proof, but should be addressed before production use.
 
-1. `shell.run` still uses `shell=True`. For production, replace raw shell strings with structured argument vectors or a tightly scoped command registry.
+1. `shell.run` uses `shell=False` with a structured arg list (`[executable] + args`). This invariant must be preserved in all future tool implementations — never pass a raw command string or set `shell=True`.
 2. Verification currently uses the local public key from `.lexecon/`. Add an explicit `--public-key` option for portable third-party verification.
 3. The audit ledger is JSONL append-only by convention, not protected by OS-level immutability.
 4. Policy matching is simple substring matching. Future versions should use normalized command parsing and rule precedence.
