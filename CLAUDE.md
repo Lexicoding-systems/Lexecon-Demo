@@ -27,7 +27,7 @@ lexecon demo                    # intercept a destructive command end-to-end
 lexecon verify .audit/ledger.jsonl  # verify ledger integrity
 ```
 
-CI runs `pytest -v` against Python 3.11 and 3.12 on every push/PR.
+CI runs `pytest` against Python 3.11 and 3.12 on every push/PR.
 
 ## Architecture and Data Flow
 
