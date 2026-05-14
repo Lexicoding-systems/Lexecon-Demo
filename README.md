@@ -69,7 +69,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Current suite: **44 tests**.
+Current suite: **87 tests**, including 29 characterization tests covering malformed-payload fail-closed behavior (non-dict inputs, `args=None`, bad `executable` types, non-string arg elements, unsupported tool names) at both the `PolicyEngine` and `Interceptor` level.
 
 ## Repository Map
 
@@ -91,7 +91,9 @@ lexecon/
     default_policy.yaml      # Dangerous command blocking patterns
 examples/
   block_destructive_shell.py # Scripted demo path
-tests/                       # Unit and end-to-end coverage
+tests/
+    test_malformed_payloads.py   # Fail-closed coverage for malformed tool_call shapes
+    ...                          # Unit and end-to-end coverage
 ```
 
 ## Threat Model (Demo Scope)
