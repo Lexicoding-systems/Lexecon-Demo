@@ -4,11 +4,15 @@ from enum import Enum
 
 
 class DecisionType(str, Enum):
-    """Possible enforcement decisions."""
+    """Possible enforcement decisions.
+
+    ESCALATE (human-in-the-loop approval) is a planned Phase 2 feature and is
+    not implemented. Do not add ESCALATE back until the escalation handler and
+    its tests are in place.
+    """
 
     ALLOW = "ALLOW"
     BLOCK = "BLOCK"
-    ESCALATE = "ESCALATE"
 
 
 @dataclass(frozen=True)

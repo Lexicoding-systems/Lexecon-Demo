@@ -1,4 +1,5 @@
 """Deterministic policy engine for tool call evaluation."""
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,35 @@ from .decision import Decision, DecisionType
 
 DEFAULT_POLICY_PATH = Path(__file__).parent.parent / "policies" / "default_policy.yaml"
 SUPPORTED_TOOLS = {"shell.run"}
+
+_SHORT_FLAG_RE = re.compile(r"^-([a-zA-Z]+)$")
+
+
+def _normalize_arg_string(executable: str, cmd_args: list[str]) -> str:
+    """
+    Merge consecutive short flags so split-flag bypasses are caught.
+
+    Example: ["rm", "-r", "-f", "."] → "rm -rf ."
+    Long flags and positional args are preserved as-is.
+    """
+    merged: list[str] = []
+    flag_chars: list[str] = []
+
+    def _flush():
+        if flag_chars:
+            merged.append("-" + "".join(flag_chars))
+            flag_chars.clear()
+
+    for arg in cmd_args:
+        m = _SHORT_FLAG_RE.match(arg)
+        if m:
+            flag_chars.extend(m.group(1))
+        else:
+            _flush()
+            merged.append(arg)
+    _flush()
+
+    return " ".join([executable] + merged)
 
 
 class PolicyEngine:
@@ -88,8 +118,11 @@ class PolicyEngine:
                     "not_allowlisted",
                 )
 
-            # Pattern-based block rules (checked against full arg string for compatibility).
+            # Build two representations for pattern matching:
+            # 1. normalized: short flags merged (-r -f → -rf) to catch split-flag bypasses
+            # 2. raw: original join for any patterns that use long-form args
             arg_string = " ".join([executable] + cmd_args)
+            normalized_arg_string = _normalize_arg_string(executable, cmd_args)
             for rule in self.rules:
                 if tool_name != rule.get("tool"):
                     continue
@@ -100,10 +133,11 @@ class PolicyEngine:
                     return Decision(DecisionType.BLOCK, "Malformed policy rule: patterns must be a list.", "error")
 
                 for pattern in patterns:
-                    if isinstance(pattern, str) and pattern in arg_string:
-                        decision_type = DecisionType.BLOCK if action == "BLOCK" else DecisionType.ESCALATE
+                    if isinstance(pattern, str) and (
+                        pattern in arg_string or pattern in normalized_arg_string
+                    ):
                         return Decision(
-                            decision_type,
+                            DecisionType.BLOCK,
                             rule.get("reason", "Policy pattern matched."),
                             rule.get("id", "unknown"),
                         )

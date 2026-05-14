@@ -1,11 +1,10 @@
+# Default policy for Lexecon Core.
+# allowed_executables is a coarse first gate — not a complete security boundary.
+# Pair every executable with block rules that cover its dangerous arg patterns.
+# For the interactive demo, use demo_policy.yaml instead.
 allowed_executables:
   - ls
   - echo
-  - cat
-  - grep
-  - pwd
-  - date
-  - whoami
 
 rules:
   - id: block_destructive_shell
