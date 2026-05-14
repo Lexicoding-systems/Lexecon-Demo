@@ -35,7 +35,9 @@ def from_anthropic_tool_use(tool_use_block: dict[str, Any]) -> dict[str, Any]:
     input_ = tool_use_block.get("input") or {}
 
     if name in _SHELL_TOOL_NAMES:
-        raw_command = input_.get("command", "")
+        raw_command = input_.get("command")
+        if not isinstance(raw_command, str):
+            raw_command = ""
         try:
             parts = shlex.split(raw_command)
         except ValueError:

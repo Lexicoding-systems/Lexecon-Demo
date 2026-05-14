@@ -71,8 +71,27 @@ def test_adapter_non_dict_raises():
         from_anthropic_tool_use("not a dict")
 
 
-def test_adapter_missing_input():
-    block = {"type": "tool_use", "name": "bash"}
+def test_adapter_null_command_fails_closed():
+    """input: {"command": null} must not raise — returns empty executable."""
+    block = {"type": "tool_use", "name": "bash", "input": {"command": None}}
+    tc = from_anthropic_tool_use(block)
+    assert tc["tool"] == "shell.run"
+    assert tc["args"]["executable"] == ""
+    assert tc["args"]["args"] == []
+
+
+def test_adapter_non_string_command_fails_closed():
+    """input: {"command": 42} must not raise — returns empty executable."""
+    block = {"type": "tool_use", "name": "bash", "input": {"command": 42}}
+    tc = from_anthropic_tool_use(block)
+    assert tc["tool"] == "shell.run"
+    assert tc["args"]["executable"] == ""
+    assert tc["args"]["args"] == []
+
+
+def test_adapter_null_input_fails_closed():
+    """input: null must not raise — treated as empty input."""
+    block = {"type": "tool_use", "name": "bash", "input": None}
     tc = from_anthropic_tool_use(block)
     assert tc["tool"] == "shell.run"
     assert tc["args"]["executable"] == ""
