@@ -69,7 +69,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-Current suite: **87 tests**, including 29 characterization tests covering malformed-payload fail-closed behavior (non-dict inputs, `args=None`, bad `executable` types, non-string arg elements, unsupported tool names) at both the `PolicyEngine` and `Interceptor` level.
+Current suite: **112 tests**, including 29 characterization tests covering malformed-payload fail-closed behavior (non-dict inputs, `args=None`, bad `executable` types, non-string arg elements, unsupported tool names) at both the `PolicyEngine` and `Interceptor` level.
 
 ## Repository Map
 

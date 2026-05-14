@@ -108,6 +108,10 @@ tool_call = {
 - The most critical test is `test_interceptor_never_executes_blocked_tool` in `tests/test_interceptor.py` — it asserts the stub was never called when policy returns BLOCK.
 - `tests/test_demo_flow.py` contains the end-to-end integration tests including multi-record chain verification.
 
+## Model Hygiene
+
+All contributions to this repository must be made by a single consistent AI model (or human). Do **not** mix model outputs. Mixing models introduces inconsistent style, redundant abstractions, and hidden assumptions that accumulate as code debt. If you are continuing work started by another model, audit the existing code before adding to it — do not layer on top of conflicting patterns.
+
 ## Local State (Gitignored)
 
 - `.lexecon/` — Ed25519 key files (`private_key.pem` mode 0600, `public_key.pem`)
